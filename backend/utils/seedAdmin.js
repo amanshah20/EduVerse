@@ -7,18 +7,18 @@ const seedAdmin = async () => {
     const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123456';
     
     console.log('🔄 Seeding admin with email:', adminEmail);
-    console.log('🔄 Admin password length:', adminPassword.length);
     
-    // Delete existing admin to ensure fresh creation
-    await User.deleteOne({ role: 'admin' });
-    
-    // Hash password explicitly
-    const hashedPassword = await bcrypt.hash(adminPassword, 12);
+    // Check if admin already exists
+    const existingAdmin = await User.findOne({ role: 'admin', email: adminEmail });
+    if (existingAdmin) {
+      console.log('✅ Admin already exists:', adminEmail);
+      return;
+    }
     
     const admin = new User({
       name: 'Super Admin',
       email: adminEmail,
-      password: adminPassword, // Set plain password, pre-save hook will hash it
+      password: adminPassword, // Pre-save hook will hash it once
       role: 'admin',
       status: 'approved',
       isVerified: true,
@@ -27,10 +27,9 @@ const seedAdmin = async () => {
     });
     
     await admin.save();
-    console.log('✅ Fresh Edu Verse Admin created:', adminEmail);
-    console.log('✅ Password hashed and saved successfully');
+    console.log('✅ Edu Verse Admin created:', adminEmail);
   } catch (err) {
-    console.error('❌ Seed admin error:', err);
+    console.error('❌ Seed admin error:', err.message);
   }
 };
 
