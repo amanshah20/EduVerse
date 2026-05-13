@@ -1,0 +1,12 @@
+{
+  "name": "eduplatform",
+  "version": "1.0.0",
+  "description": "Full-stack digital education platform",
+  "scripts": {
+    "start:backend": "cd backend && node server.js",
+    "start:frontend": "cd frontend && npm run dev",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "build": "cd frontend && npm run build"
+  },
+  "private": true
+}
