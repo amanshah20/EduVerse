@@ -103,7 +103,7 @@ FRONTEND_URL=http://localhost:5173
 
 Create `.env.local` file in frontend:
 ```bash
-VITE_API_URL=http://localhost:5000/api
+VITE_API_URL=https://edu-verse-backend-nine.vercel.app/api
 ```
 
 ### Step 3: Test Locally (5 minutes)
