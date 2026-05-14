@@ -31,6 +31,7 @@ app.use('/api/student', require('./routes/student'));
 app.use('/api/teacher', require('./routes/teacher'));
 app.use('/api/courses', require('./routes/courses'));
 app.use('/api/payment', require('./routes/payment'));
+app.use('/api/notifications', require('./routes/notifications').router);
 // app.use('/api/assignments', require('./routes/assignments')); // TODO: Create assignments route
 app.use('/api/announcements', require('./routes/announcements'));
 app.use('/api/chatbot', require('./routes/chatbot'));

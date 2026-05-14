@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Users, BookOpen, Clock, X, Check, Monitor, MapPin, Folder, FolderOpen } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, BookOpen, Clock, X, Check, Monitor, MapPin, Folder, FolderOpen, FileText, Loader } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 const API = import.meta.env.VITE_API_URL?.replace('/api','') || 'http://localhost:5000';
@@ -12,11 +12,15 @@ export default function TeacherClasses() {
   const [activeTab, setActiveTab] = useState('batches'); // 'batches' or 'classes'
   const [showCreateBatch, setShowCreateBatch] = useState(false);
   const [showCreateClass, setShowCreateClass] = useState(false);
+  const [showPassAttendance, setShowPassAttendance] = useState(false);
   const [editBatch, setEditBatch] = useState(null);
   const [editClass, setEditClass] = useState(null);
+  const [selectedBatchForAttendance, setSelectedBatchForAttendance] = useState(null);
   const [batchForm, setBatchForm] = useState({ name: '', description: '', students: [] });
   const [classForm, setClassForm] = useState({ name: '', subject: '', description: '', batch: '', teachingMode: 'online', meetingLink: '', students: [], schedule: [] });
+  const [attendanceForm, setAttendanceForm] = useState({ durationMinutes: 30, message: '', materials: [] });
   const [creating, setCreating] = useState(false);
+  const [submittingAttendance, setSubmittingAttendance] = useState(false);
 
   const load = () => Promise.all([
     api.get('/teacher/batches'),
@@ -97,12 +101,32 @@ export default function TeacherClasses() {
   };
 
   const passAttendance = async (batchId) => {
+    setSelectedBatchForAttendance(batches.find(b => b._id === batchId));
+    setShowPassAttendance(true);
+  };
+
+  const submitPassAttendance = async (e) => {
+    e.preventDefault();
+    if (attendanceForm.durationMinutes < 1 || attendanceForm.durationMinutes > 120) {
+      toast.error('Duration must be between 1 and 120 minutes');
+      return;
+    }
+
+    setSubmittingAttendance(true);
     try {
-      await api.post(`/teacher/batches/${batchId}/pass-attendance`, { durationMinutes: 30 });
-      toast.success('Attendance enabled for 30 minutes!');
+      await api.post(`/teacher/batches/${selectedBatchForAttendance._id}/pass-attendance`, {
+        durationMinutes: attendanceForm.durationMinutes,
+        message: attendanceForm.message || `Attendance enabled! You have ${attendanceForm.durationMinutes} minutes to mark your attendance.`,
+        materials: attendanceForm.materials
+      });
+      toast.success(`Attendance enabled for ${attendanceForm.durationMinutes} minutes! Notifications sent to students.`);
+      setShowPassAttendance(false);
+      setAttendanceForm({ durationMinutes: 30, message: '', materials: [] });
       load();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to enable attendance');
+    } finally {
+      setSubmittingAttendance(false);
     }
   };
 
@@ -438,6 +462,179 @@ export default function TeacherClasses() {
                     <button type="submit" className="btn btn-primary" disabled={creating}>
                       {creating ? <span className="spinner-sm" style={{ borderTopColor: '#fff' }} /> : <Check size={14} />}
                       {editClass ? 'Update' : 'Create'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Pass Attendance Modal */}
+          {showPassAttendance && selectedBatchForAttendance && (
+            <div className="modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+              <div className="modal" style={{ maxWidth: '500px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
+                <div className="modal-header">
+                  <h2>Pass Attendance - {selectedBatchForAttendance.name}</h2>
+                  <button onClick={() => setShowPassAttendance(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X /></button>
+                </div>
+                <form onSubmit={submitPassAttendance} style={{ padding: '24px' }}>
+                  {/* Duration */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <label style={{ display: 'block', fontWeight: '600', fontSize: '14px', marginBottom: '8px' }}>
+                      Duration (minutes) *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      value={attendanceForm.durationMinutes}
+                      onChange={e => setAttendanceForm({ ...attendanceForm, durationMinutes: parseInt(e.target.value) || 30 })}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontFamily: 'inherit'
+                      }}
+                      required
+                    />
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>How long will students have to mark attendance?</p>
+                  </div>
+
+                  {/* Message to Students */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <label style={{ display: 'block', fontWeight: '600', fontSize: '14px', marginBottom: '8px' }}>
+                      Message to Students
+                    </label>
+                    <textarea
+                      value={attendanceForm.message}
+                      onChange={e => setAttendanceForm({ ...attendanceForm, message: e.target.value })}
+                      placeholder={`e.g., "Please mark attendance for today's class. Use face recognition, geolocation, or QR code. You have ${attendanceForm.durationMinutes} minutes."`}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        fontFamily: 'inherit',
+                        minHeight: '80px',
+                        resize: 'vertical'
+                      }}
+                    />
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>Optional: Students will receive this message</p>
+                  </div>
+
+                  {/* Class Materials */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <label style={{ display: 'block', fontWeight: '600', fontSize: '14px', marginBottom: '8px' }}>
+                      <FileText size={14} style={{ display: 'inline', marginRight: '6px' }} />
+                      Class Materials (Links)
+                    </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {attendanceForm.materials.map((material, idx) => (
+                        <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                          <input
+                            type="text"
+                            placeholder="Material title (e.g., Chapter 5 PDF)"
+                            value={material.title || ''}
+                            onChange={e => {
+                              const updated = [...attendanceForm.materials];
+                              updated[idx].title = e.target.value;
+                              setAttendanceForm({ ...attendanceForm, materials: updated });
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '8px 10px',
+                              border: '1px solid var(--border-subtle)',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontFamily: 'inherit'
+                            }}
+                          />
+                          <input
+                            type="url"
+                            placeholder="https://..."
+                            value={material.url || ''}
+                            onChange={e => {
+                              const updated = [...attendanceForm.materials];
+                              updated[idx].url = e.target.value;
+                              setAttendanceForm({ ...attendanceForm, materials: updated });
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '8px 10px',
+                              border: '1px solid var(--border-subtle)',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontFamily: 'inherit'
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = attendanceForm.materials.filter((_, i) => i !== idx);
+                              setAttendanceForm({ ...attendanceForm, materials: updated });
+                            }}
+                            style={{
+                              padding: '6px',
+                              background: 'var(--red)',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAttendanceForm({
+                            ...attendanceForm,
+                            materials: [...attendanceForm.materials, { title: '', url: '', type: 'link' }]
+                          });
+                        }}
+                        style={{
+                          padding: '8px 12px',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        <Plus size={14} style={{ display: 'inline', marginRight: '4px' }} /> Add Material
+                      </button>
+                    </div>
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>Optional: Share study materials with students during attendance</p>
+                  </div>
+
+                  {/* Preview */}
+                  <div style={{ marginBottom: '24px', padding: '12px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--brand)', marginBottom: '8px' }}>📢 Students Will See:</div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                      ✓ Attendance enabled for <strong>{attendanceForm.durationMinutes} minutes</strong>
+                    </div>
+                    {attendanceForm.message && (
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px', fontStyle: 'italic' }}>
+                        "{attendanceForm.message}"
+                      </div>
+                    )}
+                    {attendanceForm.materials.length > 0 && (
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px' }}>
+                        📚 {attendanceForm.materials.length} material(s) available
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="modal-footer">
+                    <button type="button" className="btn btn-ghost" onClick={() => setShowPassAttendance(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" disabled={submittingAttendance}>
+                      {submittingAttendance ? <><Loader size={14} /> Enabling...</> : <><Check size={14} /> Pass Attendance</>}
                     </button>
                   </div>
                 </form>

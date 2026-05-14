@@ -1,5 +1,6 @@
-import { Bell, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import NotificationBell from './NotificationBell';
 const API = import.meta.env.VITE_API_URL?.replace('/api','') || 'http://localhost:5000';
 export default function Topbar({ title, subtitle }) {
   const { user } = useAuth();
@@ -15,11 +16,7 @@ export default function Topbar({ title, subtitle }) {
           <Search size={13} /><span style={{ fontSize:12 }}>Quick search…</span>
           <kbd style={{ background:'var(--bg-highlight)', border:'1px solid var(--border-default)', borderRadius:4, padding:'1px 5px', fontSize:10, color:'var(--text-muted)' }}>⌘K</kbd>
         </div>
-        <button style={{ width:34, height:34, borderRadius:8, background:'var(--bg-elevated)', border:'1px solid rgba(59,130,246,0.1)', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-secondary)', cursor:'pointer', position:'relative', transition:'all 160ms' }}
-          onMouseEnter={e=>e.currentTarget.style.borderColor='rgba(59,130,246,0.2)'}
-          onMouseLeave={e=>e.currentTarget.style.borderColor='rgba(59,130,246,0.1)'}>
-          <Bell size={15} />
-        </button>
+        <NotificationBell />
         <div style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 10px', borderRadius:8, background:'var(--bg-elevated)', border:'1px solid rgba(59,130,246,0.1)' }}>
           <div className="avatar" style={{ width:26, height:26, fontSize:10, fontWeight:700, background:'rgba(59,130,246,0.1)', color:'#3b82f6' }}>
             {user?.profilePhoto ? <img src={`${API}${user.profilePhoto}`} alt="" style={{ width:26,height:26,borderRadius:'50%',objectFit:'cover' }} /> : initials}

@@ -190,6 +190,15 @@ const batchSchema = new mongoose.Schema({
   attendanceActive: { type: Boolean, default: false }, // Is attendance enabled for this batch?
   attendanceStartTime: Date, // When attendance marking starts
   attendanceEndTime: Date, // When attendance marking ends
+  attendanceMessage: String, // Message sent to students
+  classMaterials: [{ // Class materials/resources
+    title: String,
+    type: { type: String, enum: ['pdf', 'doc', 'video', 'link', 'image', 'other'] },
+    url: String,
+    description: String,
+    uploadedAt: { type: Date, default: Date.now },
+    _id: false
+  }],
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
@@ -206,6 +215,40 @@ const paymentSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
+// Notification
+const notificationSchema = new mongoose.Schema({
+  recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  type: { type: String, enum: [
+    'attendance_marked',
+    'attendance_enabled',
+    'class_scheduled',
+    'course_added',
+    'assignment_created',
+    'user_registered',
+    'user_approved',
+    'user_rejected',
+    'message',
+    'login_success',
+    'login_failed'
+  ], required: true },
+  title: String,
+  message: String,
+  relatedData: {
+    batchId: mongoose.Schema.Types.ObjectId,
+    classId: mongoose.Schema.Types.ObjectId,
+    attendanceId: mongoose.Schema.Types.ObjectId,
+    courseId: mongoose.Schema.Types.ObjectId,
+    userId: mongoose.Schema.Types.ObjectId,
+    duration: Number, // in minutes
+    startTime: Date,
+    endTime: Date
+  },
+  isRead: { type: Boolean, default: false },
+  readAt: Date,
+  createdAt: { type: Date, default: Date.now }
+}, { timestamps: true });
+
 module.exports = {
   Enrollment: mongoose.model('Enrollment', enrollmentSchema),
   Hire: mongoose.model('Hire', hireSchema),
@@ -217,5 +260,6 @@ module.exports = {
   Task: mongoose.model('Task', taskSchema),
   Batch: mongoose.model('Batch', batchSchema),
   Class: mongoose.model('Class', classSchema),
-  Payment: mongoose.model('Payment', paymentSchema)
+  Payment: mongoose.model('Payment', paymentSchema),
+  Notification: mongoose.model('Notification', notificationSchema)
 };

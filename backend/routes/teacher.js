@@ -2,9 +2,11 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const { Hire, Assignment, Attendance, Quiz, Timetable, Batch, Class: ClassModel } = require('../models/index');
+const { Notification } = require('../models/index');
 const { auth, authorize } = require('../middleware/auth');
 const { sendEmail, emailTemplates } = require('../utils/email');
 const { uploadProfile, uploadAssignment } = require('../middleware/upload');
+const { createNotification } = require('./notifications');
 
 const teacherAuth = [auth, authorize('teacher')];
 
@@ -263,7 +265,7 @@ router.delete('/batches/:id', teacherAuth, async (req, res) => {
 // Pass/Enable attendance for a batch
 router.post('/batches/:id/pass-attendance', teacherAuth, async (req, res) => {
   try {
-    const { durationMinutes } = req.body;
+    const { durationMinutes, message, materials } = req.body;
     const batch = await Batch.findOne({ _id: req.params.id, teacher: req.user._id });
     if (!batch) return res.status(404).json({ message: 'Batch not found' });
     
@@ -273,9 +275,40 @@ router.post('/batches/:id/pass-attendance', teacherAuth, async (req, res) => {
     batch.attendanceActive = true;
     batch.attendanceStartTime = startTime;
     batch.attendanceEndTime = endTime;
+    batch.attendanceMessage = message || `Attendance enabled! You have ${durationMinutes || 30} minutes to mark your attendance.`;
+    if (materials && Array.isArray(materials)) {
+      batch.classMaterials = materials;
+    }
     await batch.save();
     
-    res.json({ message: 'Attendance enabled for batch', batch, endTime });
+    // Send notifications to all students in batch
+    const notificationPromises = batch.students.map(studentId =>
+      createNotification(
+        studentId,
+        'attendance_enabled',
+        `Attendance Enabled - ${batch.name}`,
+        `${req.user.name} has enabled attendance marking for ${batch.duration} minutes. ${batch.attendanceMessage}`,
+        {
+          batchId: batch._id,
+          duration: durationMinutes || 30,
+          startTime: startTime,
+          endTime: endTime
+        },
+        req.user._id
+      )
+    );
+    
+    await Promise.all(notificationPromises);
+    
+    res.json({ 
+      message: 'Attendance enabled for batch', 
+      batch: {
+        ...batch.toObject(),
+        classMaterials: batch.classMaterials,
+        attendanceMessage: batch.attendanceMessage
+      },
+      endTime 
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -322,8 +355,10 @@ router.post('/classes', teacherAuth, async (req, res) => {
       students: students || []
     });
     await newClass.save();
-    await newClass.populate('batch', 'name').populate('students', 'name email');
-    res.json(newClass);
+    const classData = await ClassModel.findById(newClass._id)
+      .populate('batch', 'name')
+      .populate('students', 'name email');
+    res.json(classData);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
