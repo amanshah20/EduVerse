@@ -1,5 +1,5 @@
 import { Outlet, useLocation } from 'react-router-dom';
-import { LayoutDashboard, BookOpen, Users, ClipboardList, BarChart2, CheckSquare, CalendarDays, UserCircle } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, ClipboardList, BarChart2, CheckSquare, CalendarDays, UserCircle, Video, Folder } from 'lucide-react';
 import Sidebar from '../../components/common/Sidebar';
 import Topbar from '../../components/common/Topbar';
 
@@ -8,6 +8,7 @@ const NAV = [
     { to:'/student', end:true, icon:LayoutDashboard, label:'Dashboard' },
   ]},
   { label: 'Learning', items: [
+    { to:'/student/classes',     icon:Folder,         label:'My Sections' },
     { to:'/student/courses',     icon:BookOpen,       label:'Courses' },
     { to:'/student/teachers',    icon:Users,          label:'Find Teachers' },
     { to:'/student/assignments', icon:ClipboardList,  label:'Assignments' },
@@ -24,6 +25,7 @@ const NAV = [
 
 const TITLES = {
   '/student':              { title:'Dashboard',    subtitle:'Your learning overview' },
+  '/student/classes':      { title:'My Sections',  subtitle:'View batches and classes from your teachers' },
   '/student/courses':      { title:'Courses',      subtitle:'Browse and manage your courses' },
   '/student/teachers':     { title:'Find Teachers',subtitle:'Hire expert tutors' },
   '/student/assignments':  { title:'Assignments',  subtitle:'Pending and submitted work' },

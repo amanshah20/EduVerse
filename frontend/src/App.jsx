@@ -15,6 +15,7 @@ import OTPPage from './pages/auth/OTPPage';
 // Student
 import StudentLayout from './pages/student/StudentLayout';
 import StudentDashboard from './pages/student/StudentDashboard';
+import StudentClasses from './pages/student/StudentClasses';
 import StudentCourses from './pages/student/StudentCourses';
 import StudentTeachers from './pages/student/StudentTeachers';
 import StudentAssignments from './pages/student/StudentAssignments';
@@ -26,6 +27,8 @@ import StudentProfile from './pages/student/StudentProfile';
 // Teacher
 import TeacherLayout from './pages/teacher/TeacherLayout';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
+import TeacherClasses from './pages/teacher/TeacherClasses';
+import TeacherAttendance from './pages/teacher/TeacherAttendance';
 import TeacherStudents from './pages/teacher/TeacherStudents';
 import TeacherAssignments from './pages/teacher/TeacherAssignments';
 import TeacherQuizzes from './pages/teacher/TeacherQuizzes';
@@ -84,6 +87,7 @@ export default function App() {
 
             <Route path="/student" element={<ProtectedRoute roles={['student']}><StudentLayout /></ProtectedRoute>}>
               <Route index element={<StudentDashboard />} />
+              <Route path="classes" element={<StudentClasses />} />
               <Route path="courses" element={<StudentCourses />} />
               <Route path="teachers" element={<StudentTeachers />} />
               <Route path="assignments" element={<StudentAssignments />} />
@@ -95,6 +99,9 @@ export default function App() {
 
             <Route path="/teacher" element={<ProtectedRoute roles={['teacher']}><TeacherLayout /></ProtectedRoute>}>
               <Route index element={<TeacherDashboard />} />
+              <Route path="batches" element={<TeacherClasses />} />
+              <Route path="classes" element={<TeacherClasses />} />
+              <Route path="attendance" element={<TeacherAttendance />} />
               <Route path="students" element={<TeacherStudents />} />
               <Route path="assignments" element={<TeacherAssignments />} />
               <Route path="quizzes" element={<TeacherQuizzes />} />

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { Hire, Assignment, Attendance, Task, Enrollment, Class: ClassModel, Quiz } = require('../models/index');
+const { Hire, Assignment, Attendance, Task, Enrollment, Batch, Class: ClassModel, Quiz } = require('../models/index');
 const { auth, authorize } = require('../middleware/auth');
 const { sendEmail, emailTemplates } = require('../utils/email');
 const { uploadProfile, uploadAssignment } = require('../middleware/upload');
@@ -182,8 +182,46 @@ router.get('/dashboard', studentAuth, async (req, res) => {
   }
 });
 
+// ===== BATCH/SECTION MANAGEMENT =====
+// Get all batches from hired teachers
+router.get('/batches', studentAuth, async (req, res) => {
+  try {
+    const hires = await Hire.find({ student: req.user._id, status: 'approved' });
+    const teacherIds = hires.map(h => h.teacher);
+    
+    const batches = await Batch.find({ teacher: { $in: teacherIds }, students: req.user._id })
+      .populate('teacher', 'name email subjects')
+      .populate('students', 'name email profilePhoto');
+    
+    res.json(batches);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get a specific batch
+router.get('/batches/:id', studentAuth, async (req, res) => {
+  try {
+    const batch = await Batch.findOne({
+      _id: req.params.id,
+      students: req.user._id
+    }).populate('teacher', 'name email subjects').populate('students', 'name email profilePhoto');
+    
+    if (!batch) return res.status(404).json({ message: 'Batch not found or access denied' });
+    
+    // Get all classes in this batch
+    const classes = await ClassModel.find({ batch: batch._id })
+      .populate('teacher', 'name email')
+      .populate('students', 'name email profilePhoto');
+    
+    res.json({ ...batch.toObject(), classes });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // ===== CLASS MANAGEMENT =====
-// Get all classes from hired teachers
+// Get all classes from hired teachers (organized by batch)
 router.get('/classes', studentAuth, async (req, res) => {
   try {
     const hires = await Hire.find({ student: req.user._id, status: 'approved' });
@@ -191,6 +229,7 @@ router.get('/classes', studentAuth, async (req, res) => {
     
     const classes = await ClassModel.find({ teacher: { $in: teacherIds } })
       .populate('teacher', 'name email subjects')
+      .populate('batch', 'name description')
       .populate('students', 'name email profilePhoto');
     
     res.json(classes);
@@ -204,6 +243,7 @@ router.get('/classes/:id', studentAuth, async (req, res) => {
   try {
     const cls = await ClassModel.findById(req.params.id)
       .populate('teacher', 'name email subjects chargeTuition')
+      .populate('batch', 'name description')
       .populate('students', 'name email profilePhoto grade');
     
     if (!cls) return res.status(404).json({ message: 'Class not found' });
@@ -271,6 +311,230 @@ router.post('/quizzes/:id/submit', studentAuth, async (req, res) => {
     await quiz.save();
 
     res.json({ message: 'Quiz submitted!', score, totalMarks, percentage });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get all classes for attendance
+router.get('/attendance/classes', studentAuth, async (req, res) => {
+  try {
+    const hires = await Hire.find({ student: req.user._id, status: 'approved' });
+    const teacherIds = hires.map(h => h.teacher);
+    
+    const classes = await ClassModel.find({ teacher: { $in: teacherIds }, isActive: true })
+      .populate('teacher', 'name email')
+      .populate('batch', 'name');
+    
+    res.json(classes);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Mark attendance by face recognition
+router.post('/attendance/mark-face', studentAuth, async (req, res) => {
+  try {
+    const { classId, batchId, faceImageUrl, method = 'face' } = req.body;
+    
+    // Verify class and batch exist
+    const classDoc = await ClassModel.findById(classId);
+    if (!classDoc) return res.status(404).json({ message: 'Class not found' });
+    
+    // Check if student is in the batch
+    const batch = await Batch.findById(batchId);
+    const isStudentInBatch = batch.students.some(s => s.toString() === req.user._id.toString());
+    if (!isStudentInBatch) return res.status(403).json({ message: 'Not enrolled in this batch' });
+    
+    // Check if attendance is active for this batch
+    const now = new Date();
+    if (!batch.attendanceActive || !batch.attendanceStartTime || !batch.attendanceEndTime) {
+      return res.status(403).json({ message: 'Attendance marking not enabled for this batch' });
+    }
+    if (now < batch.attendanceStartTime) {
+      return res.status(403).json({ message: 'Attendance marking has not started yet' });
+    }
+    if (now > batch.attendanceEndTime) {
+      return res.status(403).json({ message: 'Attendance marking time has ended' });
+    }
+    
+    // Check if already marked today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const existing = await Attendance.findOne({
+      student: req.user._id,
+      class: classId,
+      date: { $gte: today }
+    });
+    
+    if (existing) return res.status(400).json({ message: 'Already marked attendance today' });
+    
+    const attendance = new Attendance({
+      student: req.user._id,
+      teacher: classDoc.teacher,
+      class: classId,
+      batch: batchId,
+      subject: classDoc.subject,
+      date: new Date(),
+      time: new Date().toLocaleTimeString(),
+      status: 'present',
+      method: method,
+      faceImageUrl: faceImageUrl,
+      faceVerified: true
+    });
+    
+    await attendance.save();
+    res.json({ message: 'Attendance marked successfully!', attendance });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Mark attendance by geolocation
+router.post('/attendance/mark-geolocation', studentAuth, async (req, res) => {
+  try {
+    const { classId, batchId, latitude, longitude, accuracy } = req.body;
+    
+    const classDoc = await ClassModel.findById(classId);
+    if (!classDoc) return res.status(404).json({ message: 'Class not found' });
+    
+    const batch = await Batch.findById(batchId);
+    const isStudentInBatch = batch.students.some(s => s.toString() === req.user._id.toString());
+    if (!isStudentInBatch) return res.status(403).json({ message: 'Not enrolled in this batch' });
+    
+    // Check if attendance is active for this batch
+    const now = new Date();
+    if (!batch.attendanceActive || !batch.attendanceStartTime || !batch.attendanceEndTime) {
+      return res.status(403).json({ message: 'Attendance marking not enabled for this batch' });
+    }
+    if (now < batch.attendanceStartTime) {
+      return res.status(403).json({ message: 'Attendance marking has not started yet' });
+    }
+    if (now > batch.attendanceEndTime) {
+      return res.status(403).json({ message: 'Attendance marking time has ended' });
+    }
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const existing = await Attendance.findOne({
+      student: req.user._id,
+      class: classId,
+      date: { $gte: today }
+    });
+    
+    if (existing) return res.status(400).json({ message: 'Already marked attendance today' });
+    
+    const attendance = new Attendance({
+      student: req.user._id,
+      teacher: classDoc.teacher,
+      class: classId,
+      batch: batchId,
+      subject: classDoc.subject,
+      date: new Date(),
+      time: new Date().toLocaleTimeString(),
+      status: 'present',
+      method: 'geolocation',
+      latitude,
+      longitude,
+      accuracy
+    });
+    
+    await attendance.save();
+    res.json({ message: 'Attendance marked successfully!', attendance });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Mark attendance by QR code
+router.post('/attendance/mark-qr', studentAuth, async (req, res) => {
+  try {
+    const { classId, batchId, qrData } = req.body;
+    
+    const classDoc = await ClassModel.findById(classId);
+    if (!classDoc) return res.status(404).json({ message: 'Class not found' });
+    
+    const batch = await Batch.findById(batchId);
+    const isStudentInBatch = batch.students.some(s => s.toString() === req.user._id.toString());
+    if (!isStudentInBatch) return res.status(403).json({ message: 'Not enrolled in this batch' });
+    
+    // Check if attendance is active for this batch
+    const now = new Date();
+    if (!batch.attendanceActive || !batch.attendanceStartTime || !batch.attendanceEndTime) {
+      return res.status(403).json({ message: 'Attendance marking not enabled for this batch' });
+    }
+    if (now < batch.attendanceStartTime) {
+      return res.status(403).json({ message: 'Attendance marking has not started yet' });
+    }
+    if (now > batch.attendanceEndTime) {
+      return res.status(403).json({ message: 'Attendance marking time has ended' });
+    }
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const existing = await Attendance.findOne({
+      student: req.user._id,
+      class: classId,
+      date: { $gte: today }
+    });
+    
+    if (existing) return res.status(400).json({ message: 'Already marked attendance today' });
+    
+    const attendance = new Attendance({
+      student: req.user._id,
+      teacher: classDoc.teacher,
+      class: classId,
+      batch: batchId,
+      subject: classDoc.subject,
+      date: new Date(),
+      time: new Date().toLocaleTimeString(),
+      status: 'present',
+      method: 'qr',
+      qrData
+    });
+    
+    await attendance.save();
+    res.json({ message: 'Attendance marked successfully!', attendance });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get attendance history
+router.get('/attendance', studentAuth, async (req, res) => {
+  try {
+    const records = await Attendance.find({ student: req.user._id })
+      .populate('teacher', 'name email')
+      .populate('class', 'name subject')
+      .populate('batch', 'name')
+      .sort({ date: -1 });
+    
+    // Calculate statistics
+    const bySubject = {};
+    let totalPresent = 0;
+    let totalClasses = 0;
+    
+    records.forEach(record => {
+      const subject = record.class?.subject || 'Unknown';
+      if (!bySubject[subject]) {
+        bySubject[subject] = { present: 0, absent: 0, late: 0 };
+      }
+      bySubject[subject][record.status]++;
+      if (record.status === 'present') totalPresent++;
+      totalClasses++;
+    });
+    
+    const percentage = totalClasses > 0 ? Math.round((totalPresent / totalClasses) * 100) : 0;
+    
+    res.json({
+      records,
+      bySubject,
+      overall: {
+        total: totalClasses,
+        present: totalPresent,
+        percentage
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

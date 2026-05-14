@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { Hire, Assignment, Attendance, Quiz, Timetable, Class: ClassModel } = require('../models/index');
+const { Hire, Assignment, Attendance, Quiz, Timetable, Batch, Class: ClassModel } = require('../models/index');
 const { auth, authorize } = require('../middleware/auth');
 const { sendEmail, emailTemplates } = require('../utils/email');
 const { uploadProfile, uploadAssignment } = require('../middleware/upload');
@@ -192,30 +192,149 @@ router.get('/dashboard', teacherAuth, async (req, res) => {
   }
 });
 
+// ===== BATCH/SECTION MANAGEMENT =====
+// Create a new batch
+router.post('/batches', teacherAuth, async (req, res) => {
+  try {
+    const { name, description, students } = req.body;
+    const batch = new Batch({
+      teacher: req.user._id,
+      name,
+      description,
+      students: students || [],
+      totalStudents: (students || []).length
+    });
+    await batch.save();
+    await batch.populate('students', 'name email grade contact');
+    res.json(batch);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get all batches for a teacher
+router.get('/batches', teacherAuth, async (req, res) => {
+  try {
+    const batches = await Batch.find({ teacher: req.user._id }).populate('students', 'name email grade contact');
+    res.json(batches);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get a specific batch
+router.get('/batches/:id', teacherAuth, async (req, res) => {
+  try {
+    const batch = await Batch.findOne({ _id: req.params.id, teacher: req.user._id }).populate('students', 'name email grade contact');
+    if (!batch) return res.status(404).json({ message: 'Batch not found' });
+    res.json(batch);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Update batch
+router.put('/batches/:id', teacherAuth, async (req, res) => {
+  try {
+    const { name, description, students } = req.body;
+    const batch = await Batch.findOneAndUpdate(
+      { _id: req.params.id, teacher: req.user._id },
+      { name, description, students, totalStudents: (students || []).length },
+      { new: true }
+    ).populate('students', 'name email grade contact');
+    if (!batch) return res.status(404).json({ message: 'Batch not found' });
+    res.json(batch);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete batch
+router.delete('/batches/:id', teacherAuth, async (req, res) => {
+  try {
+    const batch = await Batch.findOneAndDelete({ _id: req.params.id, teacher: req.user._id });
+    if (!batch) return res.status(404).json({ message: 'Batch not found' });
+    res.json({ message: 'Batch deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Pass/Enable attendance for a batch
+router.post('/batches/:id/pass-attendance', teacherAuth, async (req, res) => {
+  try {
+    const { durationMinutes } = req.body;
+    const batch = await Batch.findOne({ _id: req.params.id, teacher: req.user._id });
+    if (!batch) return res.status(404).json({ message: 'Batch not found' });
+    
+    const startTime = new Date();
+    const endTime = new Date(startTime.getTime() + (durationMinutes || 30) * 60000);
+    
+    batch.attendanceActive = true;
+    batch.attendanceStartTime = startTime;
+    batch.attendanceEndTime = endTime;
+    await batch.save();
+    
+    res.json({ message: 'Attendance enabled for batch', batch, endTime });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Stop attendance for a batch
+router.post('/batches/:id/stop-attendance', teacherAuth, async (req, res) => {
+  try {
+    const batch = await Batch.findOne({ _id: req.params.id, teacher: req.user._id });
+    if (!batch) return res.status(404).json({ message: 'Batch not found' });
+    
+    batch.attendanceActive = false;
+    batch.attendanceStartTime = null;
+    batch.attendanceEndTime = null;
+    await batch.save();
+    
+    res.json({ message: 'Attendance disabled for batch' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // ===== CLASS MANAGEMENT =====
 // Create a new class
 router.post('/classes', teacherAuth, async (req, res) => {
   try {
-    const { name, subject, description, schedule } = req.body;
+    const { name, subject, description, batch, teachingMode, meetingLink, schedule, students } = req.body;
+    
+    if (!batch) return res.status(400).json({ message: 'Batch is required' });
+    
+    // Verify batch exists and belongs to teacher
+    const batchExists = await Batch.findOne({ _id: batch, teacher: req.user._id });
+    if (!batchExists) return res.status(404).json({ message: 'Batch not found' });
+    
     const newClass = new ClassModel({
       teacher: req.user._id,
+      batch,
       name,
       subject,
       description,
+      teachingMode: teachingMode || 'online',
+      meetingLink,
       schedule: schedule || [],
-      students: []
+      students: students || []
     });
     await newClass.save();
+    await newClass.populate('batch', 'name').populate('students', 'name email');
     res.json(newClass);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Get all classes of a teacher
+// Get all classes of a teacher (organized by batch)
 router.get('/classes', teacherAuth, async (req, res) => {
   try {
-    const classes = await ClassModel.find({ teacher: req.user._id }).populate('students', 'name email profilePhoto');
+    const classes = await ClassModel.find({ teacher: req.user._id })
+      .populate('batch', 'name description')
+      .populate('students', 'name email profilePhoto');
     res.json(classes);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -310,6 +429,150 @@ router.delete('/classes/:id', teacherAuth, async (req, res) => {
     const cls = await ClassModel.findOneAndDelete({ _id: req.params.id, teacher: req.user._id });
     if (!cls) return res.status(404).json({ message: 'Class not found' });
     res.json({ message: 'Class deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get batches for attendance
+router.get('/attendance/batches', teacherAuth, async (req, res) => {
+  try {
+    const batches = await Batch.find({ teacher: req.user._id })
+      .populate('students', 'name email')
+      .sort({ createdAt: -1 });
+    
+    res.json(batches);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get classes in a batch
+router.get('/attendance/batch/:batchId/classes', teacherAuth, async (req, res) => {
+  try {
+    const classes = await ClassModel.find({
+      teacher: req.user._id,
+      batch: req.params.batchId
+    });
+    
+    res.json(classes);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get students in batch for attendance
+router.get('/attendance/batch/:batchId/students', teacherAuth, async (req, res) => {
+  try {
+    const batch = await Batch.findOne({
+      _id: req.params.batchId,
+      teacher: req.user._id
+    }).populate('students', 'name email _id');
+    
+    if (!batch) return res.status(404).json({ message: 'Batch not found' });
+    
+    res.json(batch.students);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Mark attendance for student (teacher marks)
+router.post('/attendance/mark', teacherAuth, async (req, res) => {
+  try {
+    const { studentId, classId, batchId, status } = req.body;
+    
+    // Verify teacher owns this class
+    const cls = await ClassModel.findOne({ _id: classId, teacher: req.user._id });
+    if (!cls) return res.status(404).json({ message: 'Class not found' });
+    
+    // Check if already marked today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const existing = await Attendance.findOne({
+      student: studentId,
+      class: classId,
+      date: { $gte: today }
+    });
+    
+    if (existing) {
+      existing.status = status;
+      existing.markedBy = req.user._id;
+      existing.markedAt = new Date();
+      await existing.save();
+      return res.json({ message: 'Attendance updated', attendance: existing });
+    }
+    
+    const attendance = new Attendance({
+      student: studentId,
+      teacher: req.user._id,
+      class: classId,
+      batch: batchId,
+      subject: cls.subject,
+      date: new Date(),
+      time: new Date().toLocaleTimeString(),
+      status: status,
+      method: 'manual',
+      markedBy: req.user._id,
+      markedAt: new Date()
+    });
+    
+    await attendance.save();
+    res.json({ message: 'Attendance marked', attendance });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get attendance records for a class
+router.get('/attendance/class/:classId', teacherAuth, async (req, res) => {
+  try {
+    const cls = await ClassModel.findOne({ _id: req.params.classId, teacher: req.user._id });
+    if (!cls) return res.status(404).json({ message: 'Class not found' });
+    
+    const records = await Attendance.find({ class: req.params.classId })
+      .populate('student', 'name email')
+      .sort({ date: -1 });
+    
+    res.json(records);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get attendance for a date and class
+router.get('/attendance/class/:classId/date/:date', teacherAuth, async (req, res) => {
+  try {
+    const cls = await ClassModel.findOne({ _id: req.params.classId, teacher: req.user._id });
+    if (!cls) return res.status(404).json({ message: 'Class not found' });
+    
+    const queryDate = new Date(req.params.date);
+    queryDate.setHours(0, 0, 0, 0);
+    const nextDate = new Date(queryDate);
+    nextDate.setDate(nextDate.getDate() + 1);
+    
+    const records = await Attendance.find({
+      class: req.params.classId,
+      date: { $gte: queryDate, $lt: nextDate }
+    }).populate('student', 'name email');
+    
+    res.json(records);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete attendance record
+router.delete('/attendance/:id', teacherAuth, async (req, res) => {
+  try {
+    const attendance = await Attendance.findById(req.params.id);
+    if (!attendance) return res.status(404).json({ message: 'Attendance not found' });
+    
+    const cls = await ClassModel.findOne({ _id: attendance.class, teacher: req.user._id });
+    if (!cls) return res.status(403).json({ message: 'Not authorized' });
+    
+    await Attendance.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Attendance deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

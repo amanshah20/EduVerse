@@ -108,11 +108,28 @@ const quizSchema = new mongoose.Schema({
 // Attendance
 const attendanceSchema = new mongoose.Schema({
   student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  class: { type: mongoose.Schema.Types.ObjectId, ref: 'Class', required: true },
+  batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', required: true },
   subject: String,
   date: { type: Date, default: Date.now },
+  time: String, // Time marked
   status: { type: String, enum: ['present', 'absent', 'late'], default: 'present' },
-  method: { type: String, enum: ['manual', 'qr', 'geo', 'face'], default: 'manual' }
+  method: { type: String, enum: ['manual', 'qr', 'geolocation', 'face'], default: 'manual' },
+  // Face Recognition fields
+  faceImageUrl: String, // URL of captured face image
+  faceVerified: { type: Boolean, default: false },
+  // Geolocation fields
+  latitude: Number,
+  longitude: Number,
+  accuracy: Number,
+  // QR Code fields
+  qrData: String,
+  // IP Address
+  ipAddress: String,
+  // Teacher marked (for teacher marking)
+  markedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Teacher who marked
+  markedAt: Date
 }, { timestamps: true });
 
 // Task
@@ -130,22 +147,49 @@ const taskSchema = new mongoose.Schema({
 // Class/Section
 const classSchema = new mongoose.Schema({
   teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', required: true },
   name: { type: String, required: true },
   subject: { type: String, required: true },
   description: String,
   students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  teachingMode: { type: String, enum: ['online', 'offline', 'hybrid'], required: true, default: 'online' },
+  meetingLink: String, // For online classes
+  maxStudents: { type: Number, default: 50 },
   schedule: [{
     day: { type: String, enum: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] },
     startTime: String,
     endTime: String,
-    room: String
+    room: String, // Physical location for offline/hybrid
+    _id: false
   }],
   materials: [{
     title: String,
     type: { type: String, enum: ['pdf', 'doc', 'video', 'link', 'image'] },
     url: String,
-    uploadedAt: { type: Date, default: Date.now }
+    uploadedAt: { type: Date, default: Date.now },
+    _id: false
   }],
+  attendance: [{
+    date: Date,
+    presentStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    _id: false
+  }],
+  isActive: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+// Batch/Section
+const batchSchema = new mongoose.Schema({
+  teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  name: { type: String, required: true }, // e.g., Batch A, Batch B, Class 10A
+  description: String,
+  students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  totalStudents: { type: Number, default: 0 },
+  isActive: { type: Boolean, default: true },
+  // Attendance passing feature
+  attendanceActive: { type: Boolean, default: false }, // Is attendance enabled for this batch?
+  attendanceStartTime: Date, // When attendance marking starts
+  attendanceEndTime: Date, // When attendance marking ends
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
@@ -171,6 +215,7 @@ module.exports = {
   Quiz: mongoose.model('Quiz', quizSchema),
   Attendance: mongoose.model('Attendance', attendanceSchema),
   Task: mongoose.model('Task', taskSchema),
+  Batch: mongoose.model('Batch', batchSchema),
   Class: mongoose.model('Class', classSchema),
   Payment: mongoose.model('Payment', paymentSchema)
 };
