@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { BarChart2, CheckCircle, XCircle, Clock, AlertTriangle, Camera, MapPin, QrCode, Hand, X, Loader } from 'lucide-react';
+import { BarChart2, CheckCircle, XCircle, Clock, AlertTriangle, Camera, MapPin, QrCode, Loader } from 'lucide-react';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
 
@@ -83,18 +83,24 @@ export default function StudentAttendance() {
   // Mark Attendance
   const markAttendance = async () => {
     if (!selectedClass) return toast.error('Select a class');
+    if (!selectedClass.batch?.attendanceActive) return toast.error('Attendance not yet enabled by teacher');
+
+    // Validate marking method requirements
+    if (markMethod === 'face' && !faceImage) return toast.error('Please capture your face');
+    if (markMethod === 'geo' && !geoLocation) return toast.error('Please capture your location');
+    if (markMethod === 'qr' && !qrData) return toast.error('Please scan or enter QR code');
 
     setMarking(true);
     try {
       let payload = {
         classId: selectedClass._id,
         batchId: selectedClass.batch._id,
-        method: markMethod
+        method: markMethod === 'geo' ? 'geolocation' : markMethod
       };
 
       if (markMethod === 'face' && faceImage) {
         payload.faceImageUrl = faceImage;
-      } else if (markMethod === 'geolocation' && geoLocation) {
+      } else if (markMethod === 'geo' && geoLocation) {
         payload.latitude = geoLocation.latitude;
         payload.longitude = geoLocation.longitude;
         payload.accuracy = geoLocation.accuracy;
@@ -103,7 +109,7 @@ export default function StudentAttendance() {
       }
 
       const endpoint = markMethod === 'face' ? '/student/attendance/mark-face'
-                     : markMethod === 'geolocation' ? '/student/attendance/mark-geolocation'
+                     : markMethod === 'geo' ? '/student/attendance/mark-geolocation'
                      : markMethod === 'qr' ? '/student/attendance/mark-qr'
                      : null;
 
@@ -117,6 +123,7 @@ export default function StudentAttendance() {
       setFaceImage(null);
       setGeoLocation(null);
       setQrData('');
+      setMarkMethod('face');
       setTab('stats');
       
       // Refresh data
@@ -317,8 +324,7 @@ export default function StudentAttendance() {
                       {[
                         { id:'face', label:'Face Recognition', icon:Camera },
                         { id:'geo', label:'Geolocation', icon:MapPin },
-                        { id:'qr', label:'QR Code', icon:QrCode },
-                        { id:'manual', label:'Manual', icon:Hand }
+                        { id:'qr', label:'QR Code', icon:QrCode }
                       ].map(m => (
                         <button key={m.id}
                           onClick={() => setMarkMethod(m.id)}
