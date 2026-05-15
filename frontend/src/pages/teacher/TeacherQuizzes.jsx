@@ -10,7 +10,7 @@ export default function TeacherQuizzes() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [expanded, setExpanded] = useState(null);
-  const [form, setForm] = useState({ title:'', description:'', duration:30, questions:[emptyQ()] });
+  const [form, setForm] = useState({ title:'', description:'', duration:30, startDate:'', endDate:'', questions:[emptyQ()] });
   const [creating, setCreating] = useState(false);
 
   const load = () => api.get('/teacher/quizzes').then(r=>setQuizzes(r.data)).finally(()=>setLoading(false));
@@ -23,13 +23,15 @@ export default function TeacherQuizzes() {
 
   const create = async () => {
     if (!form.title) { toast.error('Quiz title required'); return; }
+    if (!form.startDate || !form.endDate) { toast.error('Start and end dates required'); return; }
+    if (new Date(form.startDate) >= new Date(form.endDate)) { toast.error('End date must be after start date'); return; }
     if (form.questions.some(q=>!q.question||q.options.some(o=>!o))) { toast.error('Fill all questions and options'); return; }
     setCreating(true);
     try {
       await api.post('/teacher/quizzes', form);
-      toast.success('Quiz created and sent to students!');
+      toast.success('Quiz created and published to students!');
       setShowCreate(false);
-      setForm({ title:'', description:'', duration:30, questions:[emptyQ()] });
+      setForm({ title:'', description:'', duration:30, startDate:'', endDate:'', questions:[emptyQ()] });
       load();
     } catch { toast.error('Failed to create quiz'); } finally { setCreating(false); }
   };
@@ -55,11 +57,16 @@ export default function TeacherQuizzes() {
             const avgScore = q.results?.length
               ? Math.round(q.results.reduce((s,r)=>s+(r.percentage||0),0)/q.results.length)
               : null;
+            const now = new Date();
+            const isActive = new Date(q.startDate) <= now && new Date(q.endDate) >= now;
+            const isUpcoming = new Date(q.startDate) > now;
             return (
               <div key={q._id} className="card card-hover" style={{ cursor:'default' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
                   <h3 style={{ fontSize:15, fontWeight:700, flex:1 }}>{q.title}</h3>
-                  <span className={`badge ${q.isActive?'badge-green':'badge-gray'}`} style={{ fontSize:10.5, flexShrink:0, marginLeft:8 }}>{q.isActive?'Active':'Inactive'}</span>
+                  <span className={`badge ${isActive?'badge-green':isUpcoming?'badge-blue':'badge-gray'}`} style={{ fontSize:10.5, flexShrink:0, marginLeft:8 }}>
+                    {isActive?'Open':isUpcoming?'Upcoming':'Closed'}
+                  </span>
                 </div>
                 {q.description && <p style={{ fontSize:13, color:'var(--text-muted)', lineHeight:1.5, marginBottom:12 }}>{q.description}</p>}
                 <div style={{ display:'flex', gap:14, fontSize:12.5, color:'var(--text-muted)', marginBottom:14 }}>
@@ -116,6 +123,11 @@ export default function TeacherQuizzes() {
                 <div className="field"><label className="field-label">Duration (minutes)</label><input type="number" min="1" value={form.duration} onChange={e=>setForm(p=>({...p,duration:+e.target.value}))}/></div>
               </div>
               <div className="field"><label className="field-label">Description</label><input value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} placeholder="Brief description of this quiz"/></div>
+              
+              <div className="g2">
+                <div className="field"><label className="field-label">Publish (Start Date & Time) *</label><input type="datetime-local" value={form.startDate} onChange={e=>setForm(p=>({...p,startDate:e.target.value}))}/></div>
+                <div className="field"><label className="field-label">End (Closing Date & Time) *</label><input type="datetime-local" value={form.endDate} onChange={e=>setForm(p=>({...p,endDate:e.target.value}))}/></div>
+              </div>
 
               <div style={{ height:'1px', background:'var(--border-subtle)' }}/>
               <div style={{ fontWeight:700, fontSize:14, color:'var(--text-secondary)' }}>Questions</div>

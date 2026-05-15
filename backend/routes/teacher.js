@@ -68,7 +68,10 @@ router.get('/students', teacherAuth, async (req, res) => {
 // Assignments
 router.get('/assignments', teacherAuth, async (req, res) => {
   try {
-    const assignments = await Assignment.find({ teacher: req.user._id }).populate('assignedTo', 'name email');
+    const assignments = await Assignment.find({ teacher: req.user._id })
+      .populate('assignedTo', 'name email')
+      .populate('submissions.student', 'name email')
+      .sort({ createdAt: -1 });
     res.json(assignments);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -77,23 +80,41 @@ router.get('/assignments', teacherAuth, async (req, res) => {
 
 router.post('/assignments', teacherAuth, uploadAssignment.single('file'), async (req, res) => {
   try {
+    const { title, description, dueDate, maxMarks } = req.body;
+    
+    if (!title) {
+      return res.status(400).json({ message: 'Title is required' });
+    }
+    if (!dueDate) {
+      return res.status(400).json({ message: 'Due date is required' });
+    }
+
     const hires = await Hire.find({ teacher: req.user._id, status: 'approved' });
     const studentIds = hires.map(h => h.student);
     
+    if (studentIds.length === 0) {
+      return res.status(400).json({ message: 'No approved students. Please approve hire requests first.' });
+    }
+
     const assignment = new Assignment({
       teacher: req.user._id,
-      title: req.body.title,
-      description: req.body.description,
-      dueDate: req.body.dueDate,
-      maxMarks: req.body.maxMarks || 100,
+      title: title,
+      description: description || '',
+      dueDate: new Date(dueDate),
+      maxMarks: parseInt(maxMarks) || 100,
       fileUrl: req.file ? `/uploads/assignments/${req.file.filename}` : null,
       fileName: req.file ? req.file.originalname : null,
-      assignedTo: studentIds
+      assignedTo: studentIds,
+      submissions: []
     });
+    
     await assignment.save();
+    await assignment.populate('assignedTo', 'name email');
+    
     res.json(assignment);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Assignment creation error:', error);
+    res.status(500).json({ message: error.message || 'Failed to create assignment' });
   }
 });
 
@@ -154,7 +175,10 @@ router.post('/attendance/bulk', teacherAuth, async (req, res) => {
 // Quizzes
 router.get('/quizzes', teacherAuth, async (req, res) => {
   try {
-    const quizzes = await Quiz.find({ teacher: req.user._id }).sort({ createdAt: -1 });
+    const quizzes = await Quiz.find({ teacher: req.user._id })
+      .populate('assignedTo', 'name email')
+      .populate('results.student', 'name email')
+      .sort({ createdAt: -1 });
     res.json(quizzes);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -163,14 +187,39 @@ router.get('/quizzes', teacherAuth, async (req, res) => {
 
 router.post('/quizzes', teacherAuth, async (req, res) => {
   try {
+    const { title, description, duration, startDate, endDate, questions } = req.body;
+    
+    if (!title) return res.status(400).json({ message: 'Quiz title is required' });
+    if (!startDate || !endDate) return res.status(400).json({ message: 'Start and end dates are required' });
+    if (!questions || questions.length === 0) return res.status(400).json({ message: 'At least one question is required' });
+
     const hires = await Hire.find({ teacher: req.user._id, status: 'approved' });
     const studentIds = hires.map(h => h.student);
     
-    const quiz = new Quiz({ ...req.body, teacher: req.user._id, assignedTo: studentIds });
+    if (studentIds.length === 0) {
+      return res.status(400).json({ message: 'No approved students. Please approve hire requests first.' });
+    }
+
+    const quiz = new Quiz({
+      teacher: req.user._id,
+      title,
+      description: description || '',
+      duration: parseInt(duration) || 30,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      questions: questions || [],
+      assignedTo: studentIds,
+      results: [],
+      isActive: true
+    });
+    
     await quiz.save();
+    await quiz.populate('assignedTo', 'name email');
+    
     res.json(quiz);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Quiz creation error:', error);
+    res.status(500).json({ message: error.message || 'Failed to create quiz' });
   }
 });
 
@@ -188,7 +237,16 @@ router.get('/dashboard', teacherAuth, async (req, res) => {
     const pendingGrading = assignments.reduce((sum, a) => 
       sum + a.submissions.filter(s => s.status === 'submitted').length, 0);
     
-    res.json({ activeStudents, pendingRequests, totalAssignments: assignments.length, totalQuizzes: quizzes.length, pendingGrading });
+    const totalQuizAttempts = quizzes.reduce((sum, q) => sum + (q.results?.length || 0), 0);
+    
+    res.json({ 
+      activeStudents, 
+      pendingRequests, 
+      totalAssignments: assignments.length, 
+      totalQuizzes: quizzes.length, 
+      totalQuizAttempts,
+      pendingGrading 
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

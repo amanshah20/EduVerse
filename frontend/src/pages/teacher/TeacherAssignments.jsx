@@ -21,15 +21,22 @@ export default function TeacherAssignments() {
 
   const create = async () => {
     if (!form.title) { toast.error('Title required'); return; }
+    if (!form.dueDate) { toast.error('Due date required'); return; }
     setCreating(true);
     try {
       const fd = new FormData();
-      Object.entries(form).forEach(([k,v])=>fd.append(k,v));
+      fd.append('title', form.title);
+      fd.append('description', form.description);
+      fd.append('dueDate', form.dueDate);
+      fd.append('maxMarks', parseInt(form.maxMarks) || 100);
       if (file) fd.append('file', file);
-      await api.post('/teacher/assignments', fd, { headers:{ 'Content-Type':'multipart/form-data' } });
+      const response = await api.post('/teacher/assignments', fd, { headers:{ 'Content-Type':'multipart/form-data' } });
       toast.success('Assignment created and sent to all students!');
       setShowCreate(false); setForm({ title:'', description:'', dueDate:'', maxMarks:100 }); setFile(null); load();
-    } catch { toast.error('Failed'); } finally { setCreating(false); }
+    } catch (error) { 
+      console.error('Assignment creation error:', error);
+      toast.error(error.response?.data?.message || 'Failed to create assignment'); 
+    } finally { setCreating(false); }
   };
 
   const grade = async () => {

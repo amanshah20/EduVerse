@@ -50,6 +50,7 @@ export default function TeacherDashboard() {
           { label:'Active Students',   value:stats?.activeStudents||0,   icon:GraduationCap, color:'var(--brand)',  bg:'rgba(37,99,235,0.08)' },
           { label:'Pending Requests',  value:stats?.pendingRequests||0,  icon:AlertCircle,   color:'#f59e0b',       bg:'rgba(245,158,11,0.08)' },
           { label:'Assignments',       value:stats?.totalAssignments||0, icon:ClipboardList, color:'var(--purple)', bg:'var(--purple-dim)' },
+          { label:'Tests Created',     value:stats?.totalQuizzes||0,     icon:BrainCircuit,  color:'#8b5cf6', bg:'rgba(139,92,246,0.12)' },
           { label:'Pending Grading',   value:stats?.pendingGrading||0,   icon:PenSquare,     color:'var(--cyan)',   bg:'var(--cyan-dim)' },
         ].map((s,i) => { const Icon = s.icon; return (
           <div key={i} className="stat-card">

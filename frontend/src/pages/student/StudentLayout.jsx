@@ -1,5 +1,5 @@
 import { Outlet, useLocation } from 'react-router-dom';
-import { LayoutDashboard, BookOpen, Users, ClipboardList, BarChart2, CheckSquare, CalendarDays, UserCircle, Video, Folder } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, ClipboardList, BarChart2, CheckSquare, CalendarDays, UserCircle, Video, Folder, BrainCircuit } from 'lucide-react';
 import Sidebar from '../../components/common/Sidebar';
 import Topbar from '../../components/common/Topbar';
 
@@ -14,6 +14,7 @@ const NAV = [
     { to:'/student/assignments', icon:ClipboardList,  label:'Assignments' },
   ]},
   { label: 'Academics', items: [
+    { to:'/student/quizzes',     icon:BrainCircuit,   label:'Tests' },
     { to:'/student/attendance',  icon:BarChart2,      label:'Attendance' },
     { to:'/student/tasks',       icon:CheckSquare,    label:'Tasks' },
     { to:'/student/events',      icon:CalendarDays,   label:'Events' },
@@ -29,6 +30,7 @@ const TITLES = {
   '/student/courses':      { title:'Courses',      subtitle:'Browse and manage your courses' },
   '/student/teachers':     { title:'Find Teachers',subtitle:'Hire expert tutors' },
   '/student/assignments':  { title:'Assignments',  subtitle:'Pending and submitted work' },
+  '/student/quizzes':      { title:'Tests',        subtitle:'Attend tests and view results' },
   '/student/attendance':   { title:'Attendance',   subtitle:'Track your attendance records' },
   '/student/tasks':        { title:'Tasks',        subtitle:'Daily to-do and reminders' },
   '/student/events':       { title:'Events',       subtitle:'Hackathons, workshops and more' },

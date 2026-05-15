@@ -7,14 +7,46 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [platform, setPlatform] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    Promise.all([api.get('/admin/stats'), api.get('/admin/platform-stats')])
-      .then(([s,p]) => { setStats(s.data); setPlatform(p.data); })
-      .finally(() => setLoading(false));
+    const loadData = async () => {
+      try {
+        setError(null);
+        const [s, p] = await Promise.all([
+          api.get('/admin/stats').catch(e => {
+            console.error('Failed to load stats:', e.message);
+            return { data: {} };
+          }),
+          api.get('/admin/platform-stats').catch(e => {
+            console.error('Failed to load platform stats:', e.message);
+            return { data: {} };
+          })
+        ]);
+        setStats(s.data);
+        setPlatform(p.data);
+      } catch (err) {
+        console.error('Error loading admin dashboard:', err);
+        setError(err.response?.data?.message || 'Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, []);
 
   if (loading) return <div className="loading-page"><span className="spinner spinner-lg" style={{ borderTopColor:'var(--brand)' }} /></div>;
+
+  if (error) {
+    return (
+      <div className="fade-in">
+        <div className="alert alert-danger" style={{ marginBottom: 24 }}>
+          <span>Failed to load dashboard: {error}</span>
+          <button onClick={() => window.location.reload()} className="btn btn-sm" style={{ marginLeft: 'auto' }}>Retry</button>
+        </div>
+      </div>
+    );
+  }
 
   const recentLogins = (platform?.recentLogins||[]).slice(0,10);
   const STATS = [

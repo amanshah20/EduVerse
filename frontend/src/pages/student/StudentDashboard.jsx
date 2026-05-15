@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, ClipboardList, BarChart2, CheckSquare, ArrowRight, TrendingUp, Calendar, Users } from 'lucide-react';
+import { BookOpen, ClipboardList, BarChart2, CheckSquare, ArrowRight, TrendingUp, Calendar, Users, BrainCircuit } from 'lucide-react';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 const API = import.meta.env.VITE_API_URL?.replace('/api','') || 'http://localhost:5000';
@@ -8,12 +8,14 @@ const API = import.meta.env.VITE_API_URL?.replace('/api','') || 'http://localhos
 export default function StudentDashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
+  const [quizzes, setQuizzes] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.get('/student/dashboard'), api.get('/announcements')])
-      .then(([s,a]) => { setStats(s.data); setAnnouncements(a.data.slice(0,5)); })
+    Promise.all([api.get('/student/dashboard'), api.get('/student/quizzes'), api.get('/announcements')])
+      .then(([s,q,a]) => { setStats(s.data); setQuizzes(q.data || []); setAnnouncements(a.data.slice(0,5)); })
+      .catch(e => console.error(e))
       .finally(() => setLoading(false));
   }, []);
 
@@ -22,11 +24,14 @@ export default function StudentDashboard() {
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
+  const pendingQuizzes = quizzes.filter(q => !q.myResult && new Date(q.startDate) <= new Date() && new Date(q.endDate) >= new Date());
+  const completedQuizzes = quizzes.filter(q => q.myResult);
+
   const STATS = [
     { label:'Enrolled Courses',     value: stats?.totalCourses||0,         icon: BookOpen,      color:'#3b82f6',  bg:'rgba(59,130,246,0.08)' },
     { label:'Pending Assignments',  value: stats?.pendingAssignments||0,   icon: ClipboardList, color:'#f59e0b',       bg:'rgba(245,158,11,0.08)' },
+    { label:'Pending Tests',        value: pendingQuizzes.length,          icon: BrainCircuit,  color:'#8b5cf6',  bg:'rgba(139,92,246,0.12)' },
     { label:'Attendance',           value: `${stats?.attendancePercent||0}%`, icon: BarChart2,  color:'var(--green)',  bg:'var(--green-dim)' },
-    { label:'Open Tasks',           value: stats?.pendingTasks||0,         icon: CheckSquare,   color:'#8b5cf6', bg:'rgba(139,92,246,0.12)' },
   ];
 
   const typeColor = { hackathon:'#3b82f6', workshop:'var(--green)', seminar:'#8b5cf6', exam:'var(--red)', general:'var(--text-muted)', event:'#f59e0b' };
@@ -111,8 +116,8 @@ export default function StudentDashboard() {
         {[
           { to:'/student/teachers',    icon:Users,       label:'Find a Teacher',  color:'var(--brand)' },
           { to:'/student/assignments', icon:ClipboardList,label:'Assignments',    color:'#f59e0b' },
+          { to:'/student/quizzes',     icon:BrainCircuit,label:'Take Tests',      color:'#8b5cf6' },
           { to:'/student/attendance',  icon:BarChart2,   label:'Attendance',      color:'var(--green)' },
-          { to:'/student/tasks',       icon:CheckSquare, label:'My Tasks',        color:'var(--purple)' },
         ].map((q,i) => { const Icon = q.icon; return (
           <Link key={i} to={q.to} style={{ background:'var(--bg-card)', border:'1px solid var(--border-subtle)', borderRadius:12, padding:'16px', display:'flex', flexDirection:'column', gap:10, transition:'all 160ms', textDecoration:'none' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = q.color; e.currentTarget.style.transform='translateY(-2px)'; }}
