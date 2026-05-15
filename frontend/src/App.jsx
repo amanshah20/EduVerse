@@ -19,6 +19,7 @@ import StudentClasses from './pages/student/StudentClasses';
 import StudentCourses from './pages/student/StudentCourses';
 import StudentTeachers from './pages/student/StudentTeachers';
 import StudentAssignments from './pages/student/StudentAssignments';
+import StudentQuizzes from './pages/student/StudentQuizzes';
 import StudentAttendance from './pages/student/StudentAttendance';
 import StudentTasks from './pages/student/StudentTasks';
 import StudentEvents from './pages/student/StudentEvents';
@@ -91,6 +92,7 @@ export default function App() {
               <Route path="courses" element={<StudentCourses />} />
               <Route path="teachers" element={<StudentTeachers />} />
               <Route path="assignments" element={<StudentAssignments />} />
+              <Route path="quizzes" element={<StudentQuizzes />} />
               <Route path="attendance" element={<StudentAttendance />} />
               <Route path="tasks" element={<StudentTasks />} />
               <Route path="events" element={<StudentEvents />} />
