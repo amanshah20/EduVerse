@@ -14,8 +14,24 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('token');
     if (token) {
       api.get('/auth/me')
-        .then(res => { setUser(res.data); localStorage.setItem('user', JSON.stringify(res.data)); })
-        .catch(() => { localStorage.removeItem('token'); localStorage.removeItem('user'); setUser(null); })
+        .then(res => { 
+          const userData = res.data;
+          if (userData && userData.role) {
+            setUser(userData); 
+            localStorage.setItem('user', JSON.stringify(userData));
+          } else {
+            console.error('❌ User response missing role:', userData);
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setUser(null);
+          }
+        })
+        .catch(err => { 
+          console.error('❌ Failed to verify token:', err.response?.data || err.message);
+          localStorage.removeItem('token'); 
+          localStorage.removeItem('user'); 
+          setUser(null); 
+        })
         .finally(() => setLoading(false));
     } else {
       setLoading(false);

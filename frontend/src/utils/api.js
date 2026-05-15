@@ -15,6 +15,13 @@ api.interceptors.response.use(
   res => res,
   err => {
     if (err.response?.status === 401) {
+      console.error('🔴 401 Unauthorized:', {
+        url: err.config?.url,
+        method: err.config?.method,
+        message: err.response?.data?.message,
+        hasToken: !!localStorage.getItem('token'),
+        user: JSON.parse(localStorage.getItem('user') || '{}')
+      });
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
